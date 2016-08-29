@@ -1,47 +1,33 @@
-var http = require('http')
-var url = require('url')
-var fs = require('fs')
-var path = require('path')
+var restify = require('restify'),
+    fs      = require('fs'),
+    config  = require('./bin/config.js'),
+    db      = require('./bin/db.js');
+var app     = restify.createServer();
 
-var contentTypes = {
-  'html' : 'text/html',
-  'css'  : 'text/css',
-  'ico'  : 'image/x-icon',
-  'png'  : 'image/png',
-  'svg'  : 'image/svg+xml',
-  'js'   : 'application/javascript',
-  'otf'  : 'application/x-font-otf',
-  'ttf'  : 'application/x-font-ttf',
-  'eot'  : 'application/vnd.ms-fontobject',
-  'woff' : 'application/x-font-woff',
-  'woff2': 'application/font-woff2',
-  'zip'  : 'application/zip'
-}
+db.initDB('keepAlive');
 
+app.use(restify.queryParser())
+app.use(restify.CORS())
+app.use(restify.fullResponse())
 
-http.createServer(function (pedido, resposta) {
-	var caminho = url.parse(pedido.url).pathname;
-
-	if (caminho==='/') {
-		var ficheiro = path.join(__dirname, 'public', caminho, 'index.html');
-   	} else {
-     	var ficheiro = path.join(__dirname, 'public', caminho);
-   	}
-
-	console.log('path = '+caminho);
-
-	fs.readFile(ficheiro, function (erro, dados) {
-  	if (erro) {
-    	resposta.writeHead(404);
-    	resposta.end();
-  	} else {
-    	var extensao = path.extname(ficheiro).slice(1);
-    	resposta.setHeader('Content-Type', contentTypes[extensao]);
-    	resposta.end(dados);
-  	}
+// Routes
+app.get('/parks/within', db.selectBox);
+app.get('/parks', db.selectAll);
+app.get('/status', function (req, res, next)
+{
+  res.send("{status: 'ok'}");
 });
 
-}).listen(80, 'localhost', function () {
-  console.log('--- O servidor arrancou –--');
+app.get('/', function (req, res, next)
+{
+  var data = fs.readFileSync(__dirname + '/index.html');
+  res.status(200);
+  res.header('Content-Type', 'text/html');
+  res.end(data.toString().replace(/host:port/g, req.header('Host')));
 });
 
+app.get(/\/(css|js|img)\/?.*/, restify.serveStatic({directory: __dirname+'/static'}));
+
+app.listen(config.get('PORT'), config.get('IP'), function () {
+  console.log( "Listening on " + config.get('IP') + ", port " + config.get('PORT') )
+});
